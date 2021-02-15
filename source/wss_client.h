@@ -64,7 +64,12 @@ protected:
         if (r != NSAPI_ERROR_OK) {
             return r;
         }
-        return socket->connect(host, port);
+        SocketAddress address;
+        NetworkInterface::get_default_instance()->gethostbyname(host, &address);
+        address.set_port(port);
+        nsapi_error_t res = socket->connect(address);
+        return res;
+        // return socket->connect(host, port);
     }
 
 private:

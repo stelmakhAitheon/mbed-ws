@@ -27,11 +27,11 @@
 #endif
 
 #ifndef MBED_WS_RX_PAYLOAD_BUFFER_SIZE
-#define MBED_WS_RX_PAYLOAD_BUFFER_SIZE 256
+#define MBED_WS_RX_PAYLOAD_BUFFER_SIZE 8192
 #endif
 
 #ifndef MBED_WS_RX_BUFFER_SIZE
-#define MBED_WS_RX_BUFFER_SIZE 256
+#define MBED_WS_RX_BUFFER_SIZE 8192
 #endif
 
 #ifndef MBED_WS_TX_BUFFER_SIZE
@@ -39,7 +39,7 @@
 #endif
 
 #ifndef MBED_WS_PING_INTERVAL_MS
-#define MBED_WS_PING_INTERVAL_MS 10000
+#define MBED_WS_PING_INTERVAL_MS 15000
 #endif
 
 // #define MBED_WS_DEBUG 1
@@ -134,10 +134,11 @@ public:
             _socket->close();
             delete _socket;
         }
-
+#ifdef MBED_WS_HAS_MBED_HTTP
         if (_parsed_url) {
             delete _parsed_url;
         }
+#endif
 
         if (_ping_ev != 0) {
             _queue->cancel(_ping_ev);
@@ -190,6 +191,10 @@ public:
         req->set_header("Connection", "Upgrade");
         req->set_header("Sec-WebSocket-Key", "L159VM0TWUzyDxwJEIEzjw==");
         req->set_header("Sec-WebSocket-Version", "13");
+        req->set_header("Sec-WebSocket-Protocol", "aos-protocol-runner");
+        req->set_header("token", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJfaWQiOiI2MDIxMTU1ODNiNGM1NTAwMTJlMDlmYmUiLCJzZXJpYWxOdW1iZXIiOiI2M0Y3QjY0RS0wRUYyLTRDQjgtQUM4NS0yMjE4NzQxMzFDOTkiLCJpYXQiOjE2MTI3ODA4ODh9.VeF_FQJpilMvzcaPhwzUQvNfHBg1j8SYNQXCBhKDeS4");
+
+
 
         HttpResponse* res = req->send();
         if (!res) {
@@ -255,12 +260,21 @@ public:
 
         // switch socket to non-blocking mode
         _socket->set_blocking(false);
-        _socket->sigio(_queue->event(this, &WebsocketClientBase::handle_socket_sigio));
+        // _socket->sigio(callback(_queue->event(this, &WebsocketClientBase::handle_socket_sigio)));
+        // _queue->event(this, &WebsocketClientBase::handle_socket_sigio);
+        _socket->sigio(callback(this, &WebsocketClientBase::sigio_test));
+
 
         // set ping interval
         _ping_ev = _queue->call_every(MBED_WS_PING_INTERVAL_MS, callback(this, &WebsocketClientBase::ping));
 
         return NSAPI_ERROR_OK;
+    }
+
+    void sigio_test() {
+        // printf("sigio_test\r\n");
+        _queue->call(this, &WebsocketClientBase::handle_socket_sigio);
+        // handle_socket_sigio();
     }
 
     nsapi_error_t send(WS_OPCODE opcode, const uint8_t *data, size_t data_size) {
@@ -409,9 +423,9 @@ private:
 
     void ping() {
         if (_ping_counter != _pong_counter) {
-#ifdef MBED_WS_DEBUG
+// #ifdef MBED_WS_DEBUG
             printf("Ping and pong out of sync: ping=%u pong=%u\n", _ping_counter, _pong_counter);
-#endif
+// #endif
             handle_disconnect();
             return;
         }
@@ -556,9 +570,9 @@ private:
     void handle_socket_sigio() {
         if (!_socket) return;
 
-        uint8_t rx_buffer[MBED_WS_RX_BUFFER_SIZE];
+        // uint8_t rx_buffer[MBED_WS_RX_BUFFER_SIZE];
 
-        nsapi_size_or_error_t r = _socket->recv(rx_buffer, sizeof(rx_buffer));
+        nsapi_size_or_error_t r = _socket->recv(_rx_buffer, sizeof(_rx_buffer));
 #ifdef MBED_WS_DEBUG
         printf("socket.recv returned %d\n", r); // 0 would be fine, would block would be fine too
 #endif
@@ -566,7 +580,7 @@ private:
             _curr_msg.state = WS_PARSING_NONE;
 
             for (int ix = 0; ix < r; ix++) {
-                WS_PARSING_STATE s = handle_rx_msg(&_curr_msg, rx_buffer[ix]);
+                WS_PARSING_STATE s = handle_rx_msg(&_curr_msg, _rx_buffer[ix]);
                 if (s == WS_PARSING_DONE) {
 #ifdef MBED_WS_DEBUG
                     printf("Websocket msg, opcode=%u, len=%lu: ", _curr_msg.opcode, _curr_msg.payload_len);
