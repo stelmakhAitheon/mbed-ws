@@ -262,11 +262,12 @@ public:
         _socket->set_blocking(false);
         // _socket->sigio(callback(_queue->event(this, &WebsocketClientBase::handle_socket_sigio)));
         // _queue->event(this, &WebsocketClientBase::handle_socket_sigio);
-        _socket->sigio(callback(this, &WebsocketClientBase::sigio_test));
+        // _socket->sigio(callback(this, &WebsocketClientBase::sigio_test));
 
 
         // set ping interval
         _ping_ev = _queue->call_every(MBED_WS_PING_INTERVAL_MS, callback(this, &WebsocketClientBase::ping));
+        _queue->call_every(10000, callback(this, &WebsocketClientBase::handle_socket_sigio));
 
         return NSAPI_ERROR_OK;
     }
